@@ -1,0 +1,9 @@
+{
+  "name": "brumessenger-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Brumessenger Backend API - Created by Ineza Aime Bruno",
+  "dependencies": {
+    "@vercel/blob": "^0.23.0"
+  }
+}

@@ -1,8 +1,9 @@
 // api/messages.js
-// Brumessenger Messages API - Cloud Storage for Chat History
+// Brumessenger Messages API - Simple Storage
 // Created by: Ineza Aime Bruno
 
-import { put, list } from '@vercel/blob';
+// Simple in-memory storage for messages
+let conversations = {};
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,25 +26,9 @@ export default async function handler(req, res) {
       // Create consistent channel name (sorted alphabetically)
       const channelName = [user1, user2].sort().join('-');
       
-      // Try to get existing messages
-      const { blobs } = await list({ prefix: `brumessenger-messages/${channelName}` });
-      
-      if (blobs.length === 0) {
-        return res.status(200).json({ 
-          success: true, 
-          messages: [],
-          channel: channelName
-        });
-      }
-      
-      // Get the most recent messages file
-      const messageBlob = blobs[blobs.length - 1];
-      const response = await fetch(messageBlob.url);
-      const data = await response.json();
-      
       return res.status(200).json({ 
         success: true, 
-        messages: data.messages || [],
+        messages: conversations[channelName] || [],
         channel: channelName
       });
     }
@@ -59,15 +44,9 @@ export default async function handler(req, res) {
       // Create consistent channel name
       const channelName = [from, to].sort().join('-');
       
-      // Get existing messages
-      const { blobs } = await list({ prefix: `brumessenger-messages/${channelName}` });
-      let messages = [];
-      
-      if (blobs.length > 0) {
-        const messageBlob = blobs[blobs.length - 1];
-        const response = await fetch(messageBlob.url);
-        const data = await response.json();
-        messages = data.messages || [];
+      // Initialize conversation if doesn't exist
+      if (!conversations[channelName]) {
+        conversations[channelName] = [];
       }
       
       // Add new message
@@ -78,23 +57,7 @@ export default async function handler(req, res) {
         timestamp: new Date().toISOString()
       };
       
-      messages.push(newMessage);
-      
-      // Save updated messages
-      const messageData = {
-        channel: channelName,
-        messages: messages,
-        lastUpdated: new Date().toISOString()
-      };
-      
-      await put(
-        `brumessenger-messages/${channelName}.json`, 
-        JSON.stringify(messageData), 
-        {
-          access: 'public',
-          addRandomSuffix: false
-        }
-      );
+      conversations[channelName].push(newMessage);
       
       return res.status(200).json({ 
         success: true, 

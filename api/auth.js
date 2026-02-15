@@ -3,9 +3,11 @@
 // Created by: Ineza Aime Bruno
 // Special thanks to: NSORO EMMANUEL
 
-import { put, list } from '@vercel/blob';
+// Simple in-memory storage (resets on deployment, but works immediately)
+let users = {};
 
 export default async function handler(req, res) {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -29,73 +31,55 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Username must be at least 3 characters' });
     }
     
-    // Get all users
-    const { blobs } = await list({ prefix: 'brumessenger-users/' });
-    const userBlob = blobs.find(b => b.pathname === `brumessenger-users/${username}.json`);
-    
     if (action === 'signup') {
       // Check if username exists
-      if (userBlob) {
+      if (users[username]) {
         return res.status(400).json({ error: 'Username already taken' });
       }
       
       // Create new user
-      const userData = {
+      users[username] = {
         username,
-        password, // In production, hash this!
+        password,
         createdAt: new Date().toISOString(),
         isAdmin: username.toLowerCase() === 'admin' || username.toLowerCase() === 'bruno',
         status: 'online',
         lastActive: new Date().toISOString()
       };
       
-      await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
-        access: 'public',
-        addRandomSuffix: false
-      });
-      
       return res.status(200).json({ 
         success: true, 
         message: 'Account created successfully',
         user: {
-          username: userData.username,
-          isAdmin: userData.isAdmin,
-          createdAt: userData.createdAt
+          username: users[username].username,
+          isAdmin: users[username].isAdmin,
+          createdAt: users[username].createdAt
         }
       });
     }
     
     if (action === 'login') {
       // Check if user exists
-      if (!userBlob) {
+      if (!users[username]) {
         return res.status(401).json({ error: 'Invalid username or password' });
       }
       
-      // Get user data
-      const response = await fetch(userBlob.url);
-      const userData = await response.json();
-      
       // Verify password
-      if (userData.password !== password) {
+      if (users[username].password !== password) {
         return res.status(401).json({ error: 'Invalid username or password' });
       }
       
       // Update status
-      userData.status = 'online';
-      userData.lastActive = new Date().toISOString();
-      
-      await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
-        access: 'public',
-        addRandomSuffix: false
-      });
+      users[username].status = 'online';
+      users[username].lastActive = new Date().toISOString();
       
       return res.status(200).json({ 
         success: true, 
         message: 'Login successful',
         user: {
-          username: userData.username,
-          isAdmin: userData.isAdmin || false,
-          createdAt: userData.createdAt
+          username: users[username].username,
+          isAdmin: users[username].isAdmin || false,
+          createdAt: users[username].createdAt
         }
       });
     }

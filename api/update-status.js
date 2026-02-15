@@ -57,4 +57,3 @@ export default async function handler(req, res) {
     });
   }
 }
-update-status.js

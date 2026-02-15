@@ -1,8 +1,9 @@
 // api/get-users.js
-// Get all registered users
+// Get all users
 // Created by: Ineza Aime Bruno
 
-import { list } from '@vercel/blob';
+// Simple in-memory storage (same as auth.js)
+let users = {};
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,37 +19,16 @@ export default async function handler(req, res) {
   }
   
   try {
-    const { blobs } = await list({ prefix: 'brumessenger-users/' });
-    
-    const users = await Promise.all(
-      blobs.map(async (blob) => {
-        const response = await fetch(blob.url);
-        const userData = await response.json();
-        
-        // Don't send passwords to frontend
-        return {
-          username: userData.username,
-          status: userData.status || 'offline',
-          lastActive: userData.lastActive,
-          isAdmin: userData.isAdmin || false,
-          createdAt: userData.createdAt
-        };
-      })
-    );
-    
-    // Sort by last active (most recent first)
-    users.sort((a, b) => new Date(b.lastActive) - new Date(a.lastActive));
+    const userList = Object.values(users);
     
     return res.status(200).json({ 
-      success: true, 
-      users,
-      total: users.length
+      success: true,
+      users: userList
     });
-    
   } catch (error) {
     console.error('Get users error:', error);
     return res.status(500).json({ 
-      error: 'Failed to fetch users',
+      error: 'Server error',
       details: error.message 
     });
   }

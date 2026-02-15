@@ -1,11 +1,11 @@
 // api/messages.js
-// Brumessenger Messages API - Simple Storage
+// Brumessenger Messages API
 // Created by: Ineza Aime Bruno
 
-// Simple in-memory storage for messages
-let conversations = {};
+const conversations = {};
 
 export default async function handler(req, res) {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,16 +15,19 @@ export default async function handler(req, res) {
   }
   
   try {
+    // GET messages
     if (req.method === 'GET') {
-      // Get messages for a conversation
       const { user1, user2 } = req.query;
       
       if (!user1 || !user2) {
-        return res.status(400).json({ error: 'Both user1 and user2 required' });
+        return res.status(400).json({ 
+          success: false,
+          error: 'Both user1 and user2 required' 
+        });
       }
       
-      // Create consistent channel name (sorted alphabetically)
-      const channelName = [user1, user2].sort().join('-');
+      // Create channel name (always same order)
+      const channelName = [user1.toLowerCase(), user2.toLowerCase()].sort().join('-');
       
       return res.status(200).json({ 
         success: true, 
@@ -33,27 +36,30 @@ export default async function handler(req, res) {
       });
     }
     
+    // POST new message
     if (req.method === 'POST') {
-      // Save a new message
       const { from, to, text } = req.body;
       
       if (!from || !to || !text) {
-        return res.status(400).json({ error: 'from, to, and text required' });
+        return res.status(400).json({ 
+          success: false,
+          error: 'from, to, and text required' 
+        });
       }
       
-      // Create consistent channel name
-      const channelName = [from, to].sort().join('-');
+      // Create channel name (always same order)
+      const channelName = [from.toLowerCase(), to.toLowerCase()].sort().join('-');
       
-      // Initialize conversation if doesn't exist
+      // Initialize if needed
       if (!conversations[channelName]) {
         conversations[channelName] = [];
       }
       
-      // Add new message
+      // Add message
       const newMessage = {
-        from,
-        to,
-        text,
+        from: from,
+        to: to,
+        text: text,
         timestamp: new Date().toISOString()
       };
       
@@ -66,11 +72,15 @@ export default async function handler(req, res) {
       });
     }
     
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ 
+      success: false,
+      error: 'Method not allowed' 
+    });
     
   } catch (error) {
     console.error('Messages error:', error);
     return res.status(500).json({ 
+      success: false,
       error: 'Server error',
       details: error.message 
     });

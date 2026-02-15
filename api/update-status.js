@@ -2,7 +2,8 @@
 // Update user online/offline status
 // Created by: Ineza Aime Bruno
 
-import { put, list } from '@vercel/blob';
+// Simple in-memory storage (same as auth.js)
+let users = {};
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -20,39 +21,23 @@ export default async function handler(req, res) {
   try {
     const { username, status } = req.body;
     
-    if (!username) {
-      return res.status(400).json({ error: 'Username required' });
+    if (!username || !status) {
+      return res.status(400).json({ error: 'Username and status required' });
     }
     
-    // Get user
-    const { blobs } = await list({ prefix: 'brumessenger-users/' });
-    const userBlob = blobs.find(b => b.pathname === `brumessenger-users/${username}.json`);
-    
-    if (!userBlob) {
-      return res.status(404).json({ error: 'User not found' });
+    if (users[username]) {
+      users[username].status = status;
+      users[username].lastActive = new Date().toISOString();
     }
-    
-    const response = await fetch(userBlob.url);
-    const userData = await response.json();
-    
-    // Update status and last active time
-    userData.status = status || 'online';
-    userData.lastActive = new Date().toISOString();
-    
-    await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
-      access: 'public',
-      addRandomSuffix: false
-    });
     
     return res.status(200).json({ 
       success: true,
       message: 'Status updated'
     });
-    
   } catch (error) {
     console.error('Update status error:', error);
     return res.status(500).json({ 
-      error: 'Failed to update status',
+      error: 'Server error',
       details: error.message 
     });
   }

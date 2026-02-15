@@ -2,10 +2,10 @@
 // Update user online/offline status
 // Created by: Ineza Aime Bruno
 
-// Simple in-memory storage (same as auth.js)
-let users = {};
+const users = {};
 
 export default async function handler(req, res) {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,19 +15,27 @@ export default async function handler(req, res) {
   }
   
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+    return res.status(405).json({ 
+      success: false,
+      error: 'Method not allowed' 
+    });
   }
   
   try {
     const { username, status } = req.body;
     
     if (!username || !status) {
-      return res.status(400).json({ error: 'Username and status required' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username and status required' 
+      });
     }
     
-    if (users[username]) {
-      users[username].status = status;
-      users[username].lastActive = new Date().toISOString();
+    const user = users[username.toLowerCase()];
+    
+    if (user) {
+      user.status = status;
+      user.lastActive = new Date().toISOString();
     }
     
     return res.status(200).json({ 
@@ -37,6 +45,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Update status error:', error);
     return res.status(500).json({ 
+      success: false,
       error: 'Server error',
       details: error.message 
     });

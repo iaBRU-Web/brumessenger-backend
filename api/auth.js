@@ -1,21 +1,21 @@
 // api/auth.js
 // Brumessenger Authentication API
 // Created by: Ineza Aime Bruno
-// Special thanks to: NSORO EMMANUEL
 
-// Simple in-memory storage (resets on deployment, but works immediately)
-let users = {};
+const users = {};
 
 export default async function handler(req, res) {
-  // CORS headers
+  // CORS headers - MUST be at the top
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
+  // Handle OPTIONS request for CORS
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
   
+  // Only allow POST
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -23,72 +23,106 @@ export default async function handler(req, res) {
   try {
     const { action, username, password } = req.body;
     
+    // Validate inputs
     if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username and password required' 
+      });
     }
     
     if (username.length < 3) {
-      return res.status(400).json({ error: 'Username must be at least 3 characters' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Username must be at least 3 characters' 
+      });
     }
     
+    if (password.length < 6) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Password must be at least 6 characters' 
+      });
+    }
+    
+    // SIGNUP
     if (action === 'signup') {
-      // Check if username exists
-      if (users[username]) {
-        return res.status(400).json({ error: 'Username already taken' });
+      // Check if username already exists
+      if (users[username.toLowerCase()]) {
+        return res.status(400).json({ 
+          success: false,
+          error: 'Username already taken' 
+        });
       }
       
       // Create new user
-      users[username] = {
-        username,
-        password,
+      const userData = {
+        username: username,
+        password: password,
         createdAt: new Date().toISOString(),
         isAdmin: username.toLowerCase() === 'admin' || username.toLowerCase() === 'bruno',
         status: 'online',
         lastActive: new Date().toISOString()
       };
       
+      users[username.toLowerCase()] = userData;
+      
       return res.status(200).json({ 
         success: true, 
         message: 'Account created successfully',
         user: {
-          username: users[username].username,
-          isAdmin: users[username].isAdmin,
-          createdAt: users[username].createdAt
+          username: userData.username,
+          isAdmin: userData.isAdmin,
+          createdAt: userData.createdAt
         }
       });
     }
     
+    // LOGIN
     if (action === 'login') {
+      const user = users[username.toLowerCase()];
+      
       // Check if user exists
-      if (!users[username]) {
-        return res.status(401).json({ error: 'Invalid username or password' });
+      if (!user) {
+        return res.status(401).json({ 
+          success: false,
+          error: 'Invalid username or password' 
+        });
       }
       
-      // Verify password
-      if (users[username].password !== password) {
-        return res.status(401).json({ error: 'Invalid username or password' });
+      // Check password
+      if (user.password !== password) {
+        return res.status(401).json({ 
+          success: false,
+          error: 'Invalid username or password' 
+        });
       }
       
-      // Update status
-      users[username].status = 'online';
-      users[username].lastActive = new Date().toISOString();
+      // Update user status
+      user.status = 'online';
+      user.lastActive = new Date().toISOString();
       
       return res.status(200).json({ 
         success: true, 
         message: 'Login successful',
         user: {
-          username: users[username].username,
-          isAdmin: users[username].isAdmin || false,
-          createdAt: users[username].createdAt
+          username: user.username,
+          isAdmin: user.isAdmin || false,
+          createdAt: user.createdAt
         }
       });
     }
     
-    return res.status(400).json({ error: 'Invalid action' });
+    // Invalid action
+    return res.status(400).json({ 
+      success: false,
+      error: 'Invalid action. Use "login" or "signup"' 
+    });
     
   } catch (error) {
     console.error('Auth error:', error);
     return res.status(500).json({ 
+      success: false,
       error: 'Server error',
       details: error.message 
     });

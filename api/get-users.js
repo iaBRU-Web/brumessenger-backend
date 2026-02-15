@@ -1,11 +1,10 @@
 // api/get-users.js
-// Get all users
+// Get all registered users
 // Created by: Ineza Aime Bruno
 
-const users = {};
+import { list } from '@vercel/blob';
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,25 +14,41 @@ export default async function handler(req, res) {
   }
   
   if (req.method !== 'GET') {
-    return res.status(405).json({ 
-      success: false,
-      error: 'Method not allowed' 
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
   
   try {
-    // Convert users object to array
-    const userList = Object.values(users);
+    const { blobs } = await list({ prefix: 'brumessenger-users/' });
+    
+    const users = await Promise.all(
+      blobs.map(async (blob) => {
+        const response = await fetch(blob.url);
+        const userData = await response.json();
+        
+        // Don't send passwords to frontend
+        return {
+          username: userData.username,
+          status: userData.status || 'offline',
+          lastActive: userData.lastActive,
+          isAdmin: userData.isAdmin || false,
+          createdAt: userData.createdAt
+        };
+      })
+    );
+    
+    // Sort by last active (most recent first)
+    users.sort((a, b) => new Date(b.lastActive) - new Date(a.lastActive));
     
     return res.status(200).json({ 
-      success: true,
-      users: userList
+      success: true, 
+      users,
+      total: users.length
     });
+    
   } catch (error) {
     console.error('Get users error:', error);
     return res.status(500).json({ 
-      success: false,
-      error: 'Server error',
+      error: 'Failed to fetch users',
       details: error.message 
     });
   }

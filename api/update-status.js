@@ -2,10 +2,9 @@
 // Update user online/offline status
 // Created by: Ineza Aime Bruno
 
-const users = {};
+import { put, list } from '@vercel/blob';
 
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -15,39 +14,47 @@ export default async function handler(req, res) {
   }
   
   if (req.method !== 'POST') {
-    return res.status(405).json({ 
-      success: false,
-      error: 'Method not allowed' 
-    });
+    return res.status(405).json({ error: 'Method not allowed' });
   }
   
   try {
     const { username, status } = req.body;
     
-    if (!username || !status) {
-      return res.status(400).json({ 
-        success: false,
-        error: 'Username and status required' 
-      });
+    if (!username) {
+      return res.status(400).json({ error: 'Username required' });
     }
     
-    const user = users[username.toLowerCase()];
+    // Get user
+    const { blobs } = await list({ prefix: 'brumessenger-users/' });
+    const userBlob = blobs.find(b => b.pathname === `brumessenger-users/${username}.json`);
     
-    if (user) {
-      user.status = status;
-      user.lastActive = new Date().toISOString();
+    if (!userBlob) {
+      return res.status(404).json({ error: 'User not found' });
     }
+    
+    const response = await fetch(userBlob.url);
+    const userData = await response.json();
+    
+    // Update status and last active time
+    userData.status = status || 'online';
+    userData.lastActive = new Date().toISOString();
+    
+    await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
+      access: 'public',
+      addRandomSuffix: false
+    });
     
     return res.status(200).json({ 
       success: true,
       message: 'Status updated'
     });
+    
   } catch (error) {
     console.error('Update status error:', error);
     return res.status(500).json({ 
-      success: false,
-      error: 'Server error',
+      error: 'Failed to update status',
       details: error.message 
     });
   }
 }
+update-status.js

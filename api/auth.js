@@ -1,27 +1,16 @@
-// api/auth.js
-// Brumessenger Authentication API - IMPROVED VERSION
-// Created by: Ineza Aime Bruno
-
 import { put, list } from '@vercel/blob';
 
 export default async function handler(req, res) {
-  // CORS headers - MUST be first
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-  
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
     const { action, username, password } = req.body;
     
-    // Input validation
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password required' });
     }
@@ -30,31 +19,28 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Username must be at least 3 characters' });
     }
     
-    // Get all users - with error handling
-    let blobs;
+    let blobs = [];
     try {
       const result = await list({ prefix: 'brumessenger-users/' });
-      blobs = result.blobs || [];
-    } catch (error) {
-      console.error('Error listing users:', error);
+      blobs = result?.blobs || [];
+    } catch (listError) {
+      console.error('List error:', listError);
       return res.status(500).json({ 
-        error: 'Database connection error',
-        details: 'Could not access user database. Check Vercel Blob configuration.'
+        error: 'Database connection failed',
+        hint: 'Check BLOB_READ_WRITE_TOKEN is set correctly'
       });
     }
     
     const userBlob = blobs.find(b => b.pathname === `brumessenger-users/${username}.json`);
     
     if (action === 'signup') {
-      // Check if username exists
       if (userBlob) {
         return res.status(400).json({ error: 'Username already taken' });
       }
       
-      // Create new user
       const userData = {
         username,
-        password, // In production, hash this!
+        password,
         createdAt: new Date().toISOString(),
         isAdmin: username.toLowerCase() === 'admin' || username.toLowerCase() === 'bruno',
         status: 'online',
@@ -66,11 +52,11 @@ export default async function handler(req, res) {
           access: 'public',
           addRandomSuffix: false
         });
-      } catch (error) {
-        console.error('Error creating user:', error);
+      } catch (putError) {
+        console.error('Put error:', putError);
         return res.status(500).json({ 
           error: 'Failed to create account',
-          details: 'Could not save user data. Check Vercel Blob configuration.'
+          hint: 'Database write failed'
         });
       }
       
@@ -86,30 +72,44 @@ export default async function handler(req, res) {
     }
     
     if (action === 'login') {
-      // Check if user exists
       if (!userBlob) {
         return res.status(401).json({ error: 'Invalid username or password' });
       }
       
-      // Get user data
       let userData;
       try {
-        const response = await fetch(userBlob.url);
-        userData = await response.json();
-      } catch (error) {
-        console.error('Error fetching user data:', error);
+        const fetchResponse = await fetch(userBlob.url);
+        
+        if (!fetchResponse.ok) {
+          throw new Error(`HTTP ${fetchResponse.status}: ${fetchResponse.statusText}`);
+        }
+        
+        const text = await fetchResponse.text();
+        
+        if (!text || text.trim() === '') {
+          throw new Error('Empty response from blob storage');
+        }
+        
+        userData = JSON.parse(text);
+        
+        if (!userData || typeof userData !== 'object') {
+          throw new Error('Invalid user data format');
+        }
+        
+      } catch (fetchError) {
+        console.error('Fetch user error:', fetchError);
+        console.error('Blob URL:', userBlob.url);
         return res.status(500).json({ 
           error: 'Failed to load user data',
-          details: 'Could not retrieve user information'
+          details: fetchError.message,
+          hint: 'User data corrupted or inaccessible'
         });
       }
       
-      // Verify password
       if (userData.password !== password) {
         return res.status(401).json({ error: 'Invalid username or password' });
       }
       
-      // Update status
       userData.status = 'online';
       userData.lastActive = new Date().toISOString();
       
@@ -118,9 +118,8 @@ export default async function handler(req, res) {
           access: 'public',
           addRandomSuffix: false
         });
-      } catch (error) {
-        console.error('Error updating user status:', error);
-        // Don't fail login if status update fails
+      } catch (updateError) {
+        console.error('Update error:', updateError);
       }
       
       return res.status(200).json({ 
@@ -134,14 +133,14 @@ export default async function handler(req, res) {
       });
     }
     
-    return res.status(400).json({ error: 'Invalid action. Use "login" or "signup"' });
+    return res.status(400).json({ error: 'Invalid action. Use login or signup' });
     
   } catch (error) {
     console.error('Auth error:', error);
     return res.status(500).json({ 
       error: 'Server error',
       details: error.message,
-      help: 'Check Vercel Blob environment variables'
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }

@@ -1,11 +1,11 @@
 // api/get-messages.js
-// Get messages between two users
+// Get messages between two users - IMPROVED VERSION
 // Created by: Ineza Aime Bruno
-// THIS IS A NEW FILE - FIXES MESSAGE HISTORY LOADING
 
 import { list } from '@vercel/blob';
 
 export default async function handler(req, res) {
+  // CORS headers - MUST be first
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -22,13 +22,23 @@ export default async function handler(req, res) {
     const { user1, user2 } = req.query;
     
     if (!user1 || !user2) {
-      return res.status(400).json({ error: 'Both users required' });
+      return res.status(400).json({ error: 'Both users required (user1 and user2)' });
     }
     
     const conversationKey = [user1, user2].sort().join('-');
     
     // Get messages for this conversation
-    const { blobs } = await list({ prefix: `brumessenger-messages/${conversationKey}/` });
+    let blobs;
+    try {
+      const result = await list({ prefix: `brumessenger-messages/${conversationKey}/` });
+      blobs = result.blobs || [];
+    } catch (error) {
+      console.error('Error listing messages:', error);
+      return res.status(500).json({ 
+        error: 'Database connection error',
+        details: 'Could not access messages database'
+      });
+    }
     
     if (blobs.length === 0) {
       return res.status(200).json({ 
@@ -46,11 +56,17 @@ export default async function handler(req, res) {
       });
     }
     
-    const response = await fetch(messagesBlob.url);
-    const messages = await response.json();
-    
-    // Mark messages as read for the requesting user
-    // This could be enhanced to update read status in the database
+    let messages;
+    try {
+      const response = await fetch(messagesBlob.url);
+      messages = await response.json();
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      return res.status(500).json({ 
+        error: 'Failed to load messages',
+        details: 'Could not retrieve conversation data'
+      });
+    }
     
     return res.status(200).json({ 
       success: true,
@@ -61,7 +77,7 @@ export default async function handler(req, res) {
     console.error('Get messages error:', error);
     return res.status(500).json({ 
       error: 'Failed to get messages',
-      details: error.message 
+      details: error.message
     });
   }
 }

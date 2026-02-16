@@ -1,11 +1,11 @@
 // api/auth.js
-// Brumessenger Authentication API
+// Brumessenger Authentication API - IMPROVED VERSION
 // Created by: Ineza Aime Bruno
-// Special thanks to: NSORO EMMANUEL
 
 import { put, list } from '@vercel/blob';
 
 export default async function handler(req, res) {
+  // CORS headers - MUST be first
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
   try {
     const { action, username, password } = req.body;
     
+    // Input validation
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password required' });
     }
@@ -29,8 +30,19 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: 'Username must be at least 3 characters' });
     }
     
-    // Get all users
-    const { blobs } = await list({ prefix: 'brumessenger-users/' });
+    // Get all users - with error handling
+    let blobs;
+    try {
+      const result = await list({ prefix: 'brumessenger-users/' });
+      blobs = result.blobs || [];
+    } catch (error) {
+      console.error('Error listing users:', error);
+      return res.status(500).json({ 
+        error: 'Database connection error',
+        details: 'Could not access user database. Check Vercel Blob configuration.'
+      });
+    }
+    
     const userBlob = blobs.find(b => b.pathname === `brumessenger-users/${username}.json`);
     
     if (action === 'signup') {
@@ -49,10 +61,18 @@ export default async function handler(req, res) {
         lastActive: new Date().toISOString()
       };
       
-      await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
-        access: 'public',
-        addRandomSuffix: false
-      });
+      try {
+        await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
+          access: 'public',
+          addRandomSuffix: false
+        });
+      } catch (error) {
+        console.error('Error creating user:', error);
+        return res.status(500).json({ 
+          error: 'Failed to create account',
+          details: 'Could not save user data. Check Vercel Blob configuration.'
+        });
+      }
       
       return res.status(200).json({ 
         success: true, 
@@ -72,8 +92,17 @@ export default async function handler(req, res) {
       }
       
       // Get user data
-      const response = await fetch(userBlob.url);
-      const userData = await response.json();
+      let userData;
+      try {
+        const response = await fetch(userBlob.url);
+        userData = await response.json();
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+        return res.status(500).json({ 
+          error: 'Failed to load user data',
+          details: 'Could not retrieve user information'
+        });
+      }
       
       // Verify password
       if (userData.password !== password) {
@@ -84,10 +113,15 @@ export default async function handler(req, res) {
       userData.status = 'online';
       userData.lastActive = new Date().toISOString();
       
-      await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
-        access: 'public',
-        addRandomSuffix: false
-      });
+      try {
+        await put(`brumessenger-users/${username}.json`, JSON.stringify(userData), {
+          access: 'public',
+          addRandomSuffix: false
+        });
+      } catch (error) {
+        console.error('Error updating user status:', error);
+        // Don't fail login if status update fails
+      }
       
       return res.status(200).json({ 
         success: true, 
@@ -100,13 +134,14 @@ export default async function handler(req, res) {
       });
     }
     
-    return res.status(400).json({ error: 'Invalid action' });
+    return res.status(400).json({ error: 'Invalid action. Use "login" or "signup"' });
     
   } catch (error) {
     console.error('Auth error:', error);
     return res.status(500).json({ 
       error: 'Server error',
-      details: error.message 
+      details: error.message,
+      help: 'Check Vercel Blob environment variables'
     });
   }
 }

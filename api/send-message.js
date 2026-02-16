@@ -1,11 +1,11 @@
 // api/send-message.js
-// Send and store messages with offline support
+// Send and store messages with offline support - IMPROVED VERSION
 // Created by: Ineza Aime Bruno
-// THIS IS A NEW FILE - FIXES OFFLINE MESSAGE DELIVERY
 
 import { put, list } from '@vercel/blob';
 
 export default async function handler(req, res) {
+  // CORS headers - MUST be first
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     const { from, to, text, timestamp } = req.body;
     
     if (!from || !to || !text) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Missing required fields (from, to, text)' });
     }
     
     // Create unique message ID
@@ -34,7 +34,9 @@ export default async function handler(req, res) {
     // Get existing messages for this conversation
     let messages = [];
     try {
-      const { blobs } = await list({ prefix: `brumessenger-messages/${conversationKey}/` });
+      const result = await list({ prefix: `brumessenger-messages/${conversationKey}/` });
+      const blobs = result.blobs || [];
+      
       if (blobs.length > 0) {
         const blob = blobs.find(b => b.pathname === `brumessenger-messages/${conversationKey}/messages.json`);
         if (blob) {
@@ -44,6 +46,7 @@ export default async function handler(req, res) {
       }
     } catch (error) {
       console.log('No existing messages, creating new conversation');
+      messages = [];
     }
     
     // Add new message
@@ -59,18 +62,27 @@ export default async function handler(req, res) {
     messages.push(message);
     
     // Store updated messages
-    await put(
-      `brumessenger-messages/${conversationKey}/messages.json`,
-      JSON.stringify(messages),
-      {
-        access: 'public',
-        addRandomSuffix: false
-      }
-    );
+    try {
+      await put(
+        `brumessenger-messages/${conversationKey}/messages.json`,
+        JSON.stringify(messages),
+        {
+          access: 'public',
+          addRandomSuffix: false
+        }
+      );
+    } catch (error) {
+      console.error('Error storing message:', error);
+      return res.status(500).json({ 
+        error: 'Failed to store message',
+        details: 'Could not save message to database'
+      });
+    }
     
     // Store in recipient's inbox for offline delivery
     try {
-      const { blobs } = await list({ prefix: `brumessenger-inbox/${to}/` });
+      const result = await list({ prefix: `brumessenger-inbox/${to}/` });
+      const blobs = result.blobs || [];
       let inbox = [];
       
       const inboxBlob = blobs.find(b => b.pathname === `brumessenger-inbox/${to}/messages.json`);
@@ -91,6 +103,7 @@ export default async function handler(req, res) {
       );
     } catch (error) {
       console.error('Error storing in inbox:', error);
+      // Don't fail the whole request if inbox storage fails
     }
     
     return res.status(200).json({ 
@@ -103,7 +116,8 @@ export default async function handler(req, res) {
     console.error('Send message error:', error);
     return res.status(500).json({ 
       error: 'Failed to send message',
-      details: error.message 
+      details: error.message,
+      help: 'Check Vercel Blob configuration'
     });
   }
 }
